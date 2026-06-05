@@ -1,6 +1,20 @@
-@IngestionService_HostAddress = http://localhost:0
+@IngestionService_HostAddress = http://localhost:5095
 
-GET {{IngestionService_HostAddress}}/weatherforecast/
+GET {{IngestionService_HostAddress}}/health
 Accept: application/json
+
+###
+
+POST {{IngestionService_HostAddress}}/api/readings
+Content-Type: application/json
+
+{
+  "sensorId": "sensor-001",
+  "temperature": 42.5,
+  "timestamp": "2026-06-05T12:00:00+02:00",
+  "quality": 0,
+  "alarmPriority": 0,
+  "messageId": 1
+}
 
 ###
