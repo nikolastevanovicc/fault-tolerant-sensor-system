@@ -18,14 +18,28 @@ public sealed class SensorStateStore : ISensorStateStore
                 reading.Quality,
                 null,
                 reading.MessageId),
-            (_, _) => new SensorStateSnapshot(
-                reading.SensorId,
-                receivedAt,
-                reading.Quality,
-                null,
-                reading.MessageId));
+            (_, current) =>
+            {
+                var blockedUntil = current.BlockedUntil > receivedAt
+                    ? current.BlockedUntil
+                    : null;
+
+                return new SensorStateSnapshot(
+                    reading.SensorId,
+                    receivedAt,
+                    reading.Quality,
+                    blockedUntil,
+                    reading.MessageId);
+            });
 
         return ToDto(snapshot, receivedAt);
+    }
+
+    public SensorStateDto? Get(string sensorId, DateTimeOffset now)
+    {
+        return _states.TryGetValue(sensorId, out var snapshot)
+            ? ToDto(snapshot, now)
+            : null;
     }
 
     public IReadOnlyCollection<SensorStateDto> GetAll(DateTimeOffset now)
@@ -36,6 +50,27 @@ public sealed class SensorStateStore : ISensorStateStore
             .ToArray();
     }
 
+    public SensorStateDto? Block(string sensorId, DateTimeOffset now, TimeSpan duration)
+    {
+        if (!_states.ContainsKey(sensorId))
+        {
+            return null;
+        }
+
+        var blockedUntil = now.Add(duration);
+        var snapshot = _states.AddOrUpdate(
+            sensorId,
+            _ => new SensorStateSnapshot(
+                sensorId,
+                now,
+                Shared.Enums.DataQuality.Uncertain,
+                blockedUntil,
+                0),
+            (_, current) => current with { BlockedUntil = blockedUntil });
+
+        return ToDto(snapshot, now);
+    }
+
     private static SensorStateDto ToDto(SensorStateSnapshot state, DateTimeOffset now)
     {
         return new SensorStateDto
@@ -44,7 +79,7 @@ public sealed class SensorStateStore : ISensorStateStore
             LastMessageTime = state.LastMessageTime,
             IsActive = now - state.LastMessageTime <= InactiveAfter,
             Quality = state.Quality,
-            BlockedUntil = state.BlockedUntil,
+            BlockedUntil = state.BlockedUntil > now ? state.BlockedUntil : null,
             LastMessageId = state.LastMessageId
         };
     }

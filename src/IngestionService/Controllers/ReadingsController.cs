@@ -10,20 +10,25 @@ public sealed class ReadingsController : ControllerBase
 {
     private readonly ILogger<ReadingsController> _logger;
     private readonly ISensorStateStore _sensorStateStore;
+    private readonly IReadingPersistence _readingPersistence;
     private readonly AlarmConsoleWriter _alarmConsoleWriter;
 
     public ReadingsController(
         ILogger<ReadingsController> logger,
         ISensorStateStore sensorStateStore,
+        IReadingPersistence readingPersistence,
         AlarmConsoleWriter alarmConsoleWriter)
     {
         _logger = logger;
         _sensorStateStore = sensorStateStore;
+        _readingPersistence = readingPersistence;
         _alarmConsoleWriter = alarmConsoleWriter;
     }
 
     [HttpPost]
-    public ActionResult<IngestReadingResponseDto> PostReading([FromBody] SensorReadingDto reading)
+    public async Task<ActionResult<IngestReadingResponseDto>> PostReading(
+        [FromBody] SensorReadingDto reading,
+        CancellationToken cancellationToken)
     {
         var validationError = Validate(reading);
         if (validationError is not null)
@@ -38,6 +43,18 @@ public sealed class ReadingsController : ControllerBase
         }
 
         var receivedAt = DateTimeOffset.UtcNow;
+        var existingState = _sensorStateStore.Get(reading.SensorId, receivedAt);
+        if (existingState?.BlockedUntil is not null)
+        {
+            return StatusCode(StatusCodes.Status423Locked, new IngestReadingResponseDto
+            {
+                SensorId = reading.SensorId,
+                MessageId = reading.MessageId,
+                Accepted = false,
+                Message = $"Sensor is blocked until {existingState.BlockedUntil:O}."
+            });
+        }
+
         var sensorState = _sensorStateStore.UpdateFromReading(reading, receivedAt);
 
         _logger.LogInformation(
@@ -57,6 +74,11 @@ public sealed class ReadingsController : ControllerBase
             sensorState.LastMessageId);
 
         _alarmConsoleWriter.WriteAlarm(reading);
+        await _readingPersistence.SaveAcceptedReadingAsync(
+            reading,
+            sensorState,
+            receivedAt,
+            cancellationToken);
 
         return Ok(new IngestReadingResponseDto
         {

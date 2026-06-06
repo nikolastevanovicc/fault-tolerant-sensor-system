@@ -1,8 +1,14 @@
+using IngestionService.Data;
 using IngestionService.Services;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddHostedService<DatabaseInitializer>();
+builder.Services.AddScoped<IReadingPersistence, PostgresReadingPersistence>();
 builder.Services.AddSingleton<ISensorStateStore, SensorStateStore>();
 builder.Services.AddSingleton<AlarmConsoleWriter>();
 
