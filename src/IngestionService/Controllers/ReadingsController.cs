@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using IngestionService.Services;
 using Shared.Dtos;
 
 namespace IngestionService.Controllers;
@@ -8,10 +9,14 @@ namespace IngestionService.Controllers;
 public sealed class ReadingsController : ControllerBase
 {
     private readonly ILogger<ReadingsController> _logger;
+    private readonly ISensorStateStore _sensorStateStore;
 
-    public ReadingsController(ILogger<ReadingsController> logger)
+    public ReadingsController(
+        ILogger<ReadingsController> logger,
+        ISensorStateStore sensorStateStore)
     {
         _logger = logger;
+        _sensorStateStore = sensorStateStore;
     }
 
     [HttpPost]
@@ -29,6 +34,9 @@ public sealed class ReadingsController : ControllerBase
             });
         }
 
+        var receivedAt = DateTimeOffset.UtcNow;
+        var sensorState = _sensorStateStore.UpdateFromReading(reading, receivedAt);
+
         _logger.LogInformation(
             "Reading accepted. SensorId={SensorId}, MessageId={MessageId}, Temperature={Temperature}, Quality={Quality}, AlarmPriority={AlarmPriority}, Timestamp={Timestamp}",
             reading.SensorId,
@@ -37,6 +45,13 @@ public sealed class ReadingsController : ControllerBase
             reading.Quality,
             reading.AlarmPriority,
             reading.Timestamp);
+
+        _logger.LogInformation(
+            "Sensor state updated. SensorId={SensorId}, LastMessageTime={LastMessageTime}, IsActive={IsActive}, LastMessageId={LastMessageId}",
+            sensorState.SensorId,
+            sensorState.LastMessageTime,
+            sensorState.IsActive,
+            sensorState.LastMessageId);
 
         return Ok(new IngestReadingResponseDto
         {
