@@ -10,13 +10,16 @@ public sealed class ReadingsController : ControllerBase
 {
     private readonly ILogger<ReadingsController> _logger;
     private readonly ISensorStateStore _sensorStateStore;
+    private readonly AlarmConsoleWriter _alarmConsoleWriter;
 
     public ReadingsController(
         ILogger<ReadingsController> logger,
-        ISensorStateStore sensorStateStore)
+        ISensorStateStore sensorStateStore,
+        AlarmConsoleWriter alarmConsoleWriter)
     {
         _logger = logger;
         _sensorStateStore = sensorStateStore;
+        _alarmConsoleWriter = alarmConsoleWriter;
     }
 
     [HttpPost]
@@ -52,6 +55,8 @@ public sealed class ReadingsController : ControllerBase
             sensorState.LastMessageTime,
             sensorState.IsActive,
             sensorState.LastMessageId);
+
+        _alarmConsoleWriter.WriteAlarm(reading);
 
         return Ok(new IngestReadingResponseDto
         {
