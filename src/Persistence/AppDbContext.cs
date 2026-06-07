@@ -16,6 +16,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<ConsensusReadingEntity> ConsensusReadings { get; set; }
 
+    public DbSet<SensorAnomalyStateEntity> SensorAnomalyStates => Set<SensorAnomalyStateEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<SensorReadingEntity>(entity =>
@@ -57,6 +59,17 @@ public sealed class AppDbContext : DbContext
             entity.Property(reading => reading.Algorithm).HasMaxLength(100).IsRequired();
             entity.Property(reading => reading.CreatedAt).IsRequired();
             entity.HasIndex(reading => new { reading.PeriodStart, reading.PeriodEnd }).IsUnique();
+        });
+
+        modelBuilder.Entity<SensorAnomalyStateEntity>(entity =>
+        {
+            entity.ToTable("SensorAnomalyStates");
+            entity.HasKey(state => state.Id);
+            entity.Property(state => state.SensorId).HasMaxLength(100).IsRequired();
+            entity.Property(state => state.ConsecutiveDeviationCount).IsRequired();
+            entity.Property(state => state.LastDeviation).IsRequired(false);
+            entity.Property(state => state.LastUpdatedAt).IsRequired();
+            entity.HasIndex(state => state.SensorId).IsUnique();
         });
     }
 }
