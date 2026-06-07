@@ -1,7 +1,7 @@
-using IngestionService.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Persistence.Entities;
 
-namespace IngestionService.Data;
+namespace Persistence;
 
 public sealed class AppDbContext : DbContext
 {

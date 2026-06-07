@@ -1,6 +1,6 @@
 using Shared.Enums;
 
-namespace IngestionService.Data.Entities;
+namespace Persistence.Entities;
 
 public sealed class SensorReadingEntity
 {

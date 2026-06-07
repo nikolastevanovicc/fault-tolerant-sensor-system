@@ -1,6 +1,6 @@
-using IngestionService.Data;
-using IngestionService.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Persistence;
+using Persistence.Entities;
 using Shared.Dtos;
 
 namespace IngestionService.Services;
