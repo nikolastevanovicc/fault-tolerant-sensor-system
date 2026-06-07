@@ -5,6 +5,16 @@ Accept: application/json
 
 ###
 
+GET {{IngestionService_HostAddress}}/api/sensors
+Accept: application/json
+
+###
+
+POST {{IngestionService_HostAddress}}/api/sensors/sensor-001/block
+Accept: application/json
+
+###
+
 POST {{IngestionService_HostAddress}}/api/readings
 Content-Type: application/json
 
