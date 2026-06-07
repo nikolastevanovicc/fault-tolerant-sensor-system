@@ -14,6 +14,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<SensorStateEntity> SensorStates => Set<SensorStateEntity>();
 
+    public DbSet<ConsensusReadingEntity> ConsensusReadings { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<SensorReadingEntity>(entity =>
@@ -41,6 +43,20 @@ public sealed class AppDbContext : DbContext
             entity.Property(state => state.IsActive).IsRequired();
             entity.Property(state => state.Quality).IsRequired();
             entity.Property(state => state.LastMessageId).IsRequired();
+        });
+
+        modelBuilder.Entity<ConsensusReadingEntity>(entity =>
+        {
+            entity.ToTable("ConsensusReadings");
+            entity.HasKey(reading => reading.Id);
+            entity.Property(reading => reading.PeriodStart).IsRequired();
+            entity.Property(reading => reading.PeriodEnd).IsRequired();
+            entity.Property(reading => reading.Value).IsRequired();
+            entity.Property(reading => reading.UsedSensorCount).IsRequired();
+            entity.Property(reading => reading.RawReadingCount).IsRequired();
+            entity.Property(reading => reading.Algorithm).HasMaxLength(100).IsRequired();
+            entity.Property(reading => reading.CreatedAt).IsRequired();
+            entity.HasIndex(reading => new { reading.PeriodStart, reading.PeriodEnd }).IsUnique();
         });
     }
 }
