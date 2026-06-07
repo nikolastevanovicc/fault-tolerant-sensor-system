@@ -1,6 +1,6 @@
-using IngestionService.Data;
 using IngestionService.Services;
 using Microsoft.EntityFrameworkCore;
+using Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 

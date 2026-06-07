@@ -1,23 +1,8 @@
 ﻿using System.Net.Http.Json;
+using SensorClient;
 using SensorClient.Simulation;
 using Shared.Dtos;
 using Shared.Enums;
-
-var baseAddress = args.Length > 0
-    ? args[0]
-    : "http://localhost:5095";
-
-using var client = new HttpClient
-{
-    BaseAddress = new Uri(baseAddress)
-};
-
-using var cancellation = new CancellationTokenSource();
-Console.CancelKeyPress += (_, eventArgs) =>
-{
-    eventArgs.Cancel = true;
-    cancellation.Cancel();
-};
 
 var sensors = new[]
 {
@@ -28,11 +13,50 @@ var sensors = new[]
     new SimulatedSensor("sensor-005", 33, 69, DataQuality.Good, new AlarmThresholds(48, 58, 65))
 };
 
+SensorClientOptions options;
+try
+{
+    options = SensorClientOptions.Parse(args, sensors[^1].SensorId);
+}
+catch (Exception ex) when (ex is ArgumentException or UriFormatException)
+{
+    Console.Error.WriteLine($"Invalid SensorClient arguments: {ex.Message}");
+    Console.Error.WriteLine(
+        "Usage: SensorClient [baseAddress] [--malicious-demo] [--malicious-sensor <sensorId>] [--malicious-offset <double>]");
+    return;
+}
+
+if (options.MaliciousDemoEnabled
+    && !sensors.Any(sensor => string.Equals(sensor.SensorId, options.MaliciousSensorId, StringComparison.OrdinalIgnoreCase)))
+{
+    Console.Error.WriteLine($"Malicious sensor '{options.MaliciousSensorId}' is not configured.");
+    return;
+}
+
+using var client = new HttpClient
+{
+    BaseAddress = options.BaseAddress
+};
+
+using var cancellation = new CancellationTokenSource();
+Console.CancelKeyPress += (_, eventArgs) =>
+{
+    eventArgs.Cancel = true;
+    cancellation.Cancel();
+};
+
 var generator = new SensorReadingGenerator();
 var consoleWriter = new ConsoleReadingWriter();
-var tasks = sensors.Select(sensor => RunSensorAsync(sensor, client, generator, consoleWriter, cancellation.Token));
+var tasks = sensors.Select(sensor => RunSensorAsync(sensor, client, generator, consoleWriter, options, cancellation.Token));
 
 Console.WriteLine($"Sending readings to {client.BaseAddress}api/readings");
+if (options.MaliciousDemoEnabled)
+{
+    Console.WriteLine("Malicious demo mode is active.");
+    Console.WriteLine($"Malicious SensorId: {options.MaliciousSensorId}");
+    Console.WriteLine($"Malicious offset: {options.MaliciousOffset:0.0###} C");
+}
+
 Console.WriteLine("Press Ctrl+C to stop.");
 
 await Task.WhenAll(tasks);
@@ -43,6 +67,7 @@ static async Task RunSensorAsync(
     HttpClient client,
     SensorReadingGenerator generator,
     ConsoleReadingWriter consoleWriter,
+    SensorClientOptions options,
     CancellationToken cancellationToken)
 {
     long messageId = 0;
@@ -51,6 +76,21 @@ static async Task RunSensorAsync(
     {
         messageId++;
         var reading = generator.CreateReading(sensor, messageId);
+
+        if (options.MaliciousDemoEnabled
+            && string.Equals(sensor.SensorId, options.MaliciousSensorId, StringComparison.OrdinalIgnoreCase))
+        {
+            var originalTemperature = reading.Temperature;
+            var maliciousTemperature = Math.Round(originalTemperature + options.MaliciousOffset, 2);
+            reading = reading with
+            {
+                Temperature = maliciousTemperature,
+                AlarmPriority = sensor.AlarmThresholds.GetPriority(maliciousTemperature)
+            };
+
+            Console.WriteLine(
+                $"[MALICIOUS] {sensor.SensorId}: original {originalTemperature} C, malicious {maliciousTemperature} C");
+        }
 
         await SendReadingAsync(client, reading, consoleWriter, cancellationToken);
 

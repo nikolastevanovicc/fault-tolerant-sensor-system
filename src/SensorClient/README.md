@@ -32,4 +32,17 @@ Druga adresa moze se proslediti kao argument:
 dotnet run --project src/SensorClient/SensorClient.csproj -- http://localhost:5095
 ```
 
+Za demonstraciju detekcije zlonamernog senzora:
+
+```bash
+dotnet run --project src/SensorClient/SensorClient.csproj -- --malicious-demo
+```
+
+Podrazumevano se menja vrednost poslednjeg senzora (`sensor-005`) za `60.0` stepeni. Senzor i
+odstupanje mogu se podesiti argumentima:
+
+```bash
+dotnet run --project src/SensorClient/SensorClient.csproj -- --malicious-demo --malicious-sensor sensor-004 --malicious-offset 45.5
+```
+
 Za zaustavljanje koristiti `Ctrl+C`.

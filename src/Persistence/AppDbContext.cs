@@ -1,7 +1,7 @@
-using IngestionService.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Persistence.Entities;
 
-namespace IngestionService.Data;
+namespace Persistence;
 
 public sealed class AppDbContext : DbContext
 {
@@ -13,6 +13,10 @@ public sealed class AppDbContext : DbContext
     public DbSet<SensorReadingEntity> SensorReadings => Set<SensorReadingEntity>();
 
     public DbSet<SensorStateEntity> SensorStates => Set<SensorStateEntity>();
+
+    public DbSet<ConsensusReadingEntity> ConsensusReadings { get; set; }
+
+    public DbSet<SensorAnomalyStateEntity> SensorAnomalyStates => Set<SensorAnomalyStateEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +45,31 @@ public sealed class AppDbContext : DbContext
             entity.Property(state => state.IsActive).IsRequired();
             entity.Property(state => state.Quality).IsRequired();
             entity.Property(state => state.LastMessageId).IsRequired();
+        });
+
+        modelBuilder.Entity<ConsensusReadingEntity>(entity =>
+        {
+            entity.ToTable("ConsensusReadings");
+            entity.HasKey(reading => reading.Id);
+            entity.Property(reading => reading.PeriodStart).IsRequired();
+            entity.Property(reading => reading.PeriodEnd).IsRequired();
+            entity.Property(reading => reading.Value).IsRequired();
+            entity.Property(reading => reading.UsedSensorCount).IsRequired();
+            entity.Property(reading => reading.RawReadingCount).IsRequired();
+            entity.Property(reading => reading.Algorithm).HasMaxLength(100).IsRequired();
+            entity.Property(reading => reading.CreatedAt).IsRequired();
+            entity.HasIndex(reading => new { reading.PeriodStart, reading.PeriodEnd }).IsUnique();
+        });
+
+        modelBuilder.Entity<SensorAnomalyStateEntity>(entity =>
+        {
+            entity.ToTable("SensorAnomalyStates");
+            entity.HasKey(state => state.Id);
+            entity.Property(state => state.SensorId).HasMaxLength(100).IsRequired();
+            entity.Property(state => state.ConsecutiveDeviationCount).IsRequired();
+            entity.Property(state => state.LastDeviation).IsRequired(false);
+            entity.Property(state => state.LastUpdatedAt).IsRequired();
+            entity.HasIndex(state => state.SensorId).IsUnique();
         });
     }
 }

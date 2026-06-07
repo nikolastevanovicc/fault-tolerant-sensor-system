@@ -18,18 +18,24 @@ Lokalna PostgreSQL baza moze se pokrenuti iz repozitorijuma:
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-Pri pokretanju servis trenutno koristi `EnsureCreated` da napravi potrebne tabele ako ne postoje.
+Pri pokretanju servis primenjuje Entity Framework Core migracije.
 
 ## Endpoint-i
 
 - `GET /health` - osnovna provera dostupnosti servisa
 - `POST /api/readings` - prijem jednog ocitavanja senzora
+- `GET /api/readings/history` - historija senzorskih ocitavanja
+- `GET /api/consensus/latest` - posljednja izracunata konsenzusna vrijednost
+- `GET /api/consensus/history` - historija konsenzusnih vrijednosti
 - `GET /api/sensors` - pregled svih poznatih senzora i njihovog trenutnog statusa
+- `GET /api/sensors/active` - pregled trenutno aktivnih senzora
 - `POST /api/sensors/{sensorId}/block` - privremeno blokira poznati senzor na 30 sekundi
 
 Primer zahteva nalazi se u `IngestionService.http`.
 
-Senzor se smatra aktivnim ako je server primio njegovu poruku u poslednjih 10 sekundi.
+`GET /api/sensors` i `GET /api/sensors/active` dinamicki racunaju aktivni status iz
+`LastMessageTime`. Senzor se smatra aktivnim ako je server primio njegovu poruku u
+poslednjih 10 sekundi.
 
 Ako ocitavanje sadrzi alarm prioriteta 1, 2 ili 3, server ispisuje alarm u konzoli odgovarajucom bojom.
 

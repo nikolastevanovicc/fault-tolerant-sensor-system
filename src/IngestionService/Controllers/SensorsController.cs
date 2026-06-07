@@ -1,5 +1,7 @@
 using IngestionService.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Persistence;
 using Shared.Dtos;
 
 namespace IngestionService.Controllers;
@@ -11,19 +13,60 @@ public sealed class SensorsController : ControllerBase
     private static readonly TimeSpan ManualBlockDuration = TimeSpan.FromSeconds(30);
     private readonly ISensorStateStore _sensorStateStore;
     private readonly IReadingPersistence _readingPersistence;
+    private readonly AppDbContext _dbContext;
 
     public SensorsController(
         ISensorStateStore sensorStateStore,
-        IReadingPersistence readingPersistence)
+        IReadingPersistence readingPersistence,
+        AppDbContext dbContext)
     {
         _sensorStateStore = sensorStateStore;
         _readingPersistence = readingPersistence;
+        _dbContext = dbContext;
     }
 
     [HttpGet]
-    public ActionResult<IReadOnlyCollection<SensorStateDto>> GetSensors()
+    public async Task<ActionResult<IReadOnlyCollection<SensorStateDto>>> GetSensors(
+        CancellationToken cancellationToken)
     {
-        var sensors = _sensorStateStore.GetAll(DateTimeOffset.UtcNow);
+        var cutoff = DateTimeOffset.UtcNow.AddSeconds(-10);
+        var sensors = await _dbContext.SensorStates
+            .AsNoTracking()
+            .OrderBy(sensor => sensor.SensorId)
+            .Select(sensor => new SensorStateDto
+            {
+                SensorId = sensor.SensorId,
+                LastMessageTime = sensor.LastMessageTime,
+                IsActive = sensor.LastMessageTime >= cutoff,
+                Quality = sensor.Quality,
+                BlockedUntil = sensor.BlockedUntil,
+                LastMessageId = sensor.LastMessageId
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(sensors);
+    }
+
+    [HttpGet("active")]
+    public async Task<ActionResult<IReadOnlyCollection<SensorStateDto>>> GetActiveSensors(
+        CancellationToken cancellationToken)
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddSeconds(-10);
+        var sensors = await _dbContext.SensorStates
+            .AsNoTracking()
+            .Where(sensor => sensor.LastMessageTime >= cutoff)
+            .OrderBy(sensor => sensor.SensorId)
+            .Select(sensor => new SensorStateDto
+            {
+                SensorId = sensor.SensorId,
+                LastMessageTime = sensor.LastMessageTime,
+                IsActive = true,
+                Quality = sensor.Quality,
+                BlockedUntil = sensor.BlockedUntil,
+                LastMessageId = sensor.LastMessageId
+            })
+            .ToListAsync(cancellationToken);
+
         return Ok(sensors);
     }
 

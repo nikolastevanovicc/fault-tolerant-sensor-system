@@ -7,8 +7,10 @@ Distribuirani sistem za prikupljanje, obradu i cuvanje podataka sa senzora tempe
 ```text
 src/
   Shared/              DTO modeli, enum-i i ugovori koje dele svi servisi
+  Persistence/         EF Core DbContext, entiteti i migracije
   SensorClient/        Konzolna aplikacija koja simulira senzore
   IngestionService/    ASP.NET Core Web API za prijem ocitavanja
+  ConsensusService/    Worker servis za BFT konsenzus i detekciju anomalija
 
 docker/                docker-compose i lokalna infrastruktura
 k8s/                   Kubernetes/Minikube manifesti
@@ -57,18 +59,38 @@ Pokretanje klijenta sa 5 simuliranih senzora:
 dotnet run --project src/SensorClient/SensorClient.csproj
 ```
 
+Pokretanje klijenta sa malicioznim senzorom:
+
+```bash
+dotnet run --project src/SensorClient/SensorClient.csproj -- --malicious-demo --malicious-offset 60
+```
+
 Zaustavljanje klijenta:
 
 ```text
 Ctrl+C
 ```
 
+## Pokretanje ConsensusService
+
+Nakon pokretanja baze i `IngestionService`, pokrenuti worker servis:
+
+```bash
+dotnet run --project src/ConsensusService/ConsensusService.csproj
+```
+
+Servis periodično racuna BFT konsenzus iz sacuvanih ocitavanja i azurira stanje detekcije anomalija.
+
 ## API rute
 
 ```text
 GET  /health
 POST /api/readings
+GET  /api/readings/history
+GET  /api/consensus/latest
+GET  /api/consensus/history
 GET  /api/sensors
+GET  /api/sensors/active
 POST /api/sensors/{sensorId}/block
 ```
 
@@ -91,15 +113,21 @@ Tabele koje se trenutno koriste:
 ```text
 SensorReadings
 SensorStates
+ConsensusReadings
+SensorAnomalyStates
 ```
 
-Servis pri pokretanju koristi `EnsureCreated` da napravi tabele ako ne postoje.
+Servis pri pokretanju primenjuje Entity Framework Core migracije.
 
 Provera podataka u bazi:
 
 ```bash
 docker compose -f docker/docker-compose.yml exec -T postgres psql -U snus -d snus_sensor_monitoring -c 'select count(*) from "SensorReadings";'
 ```
+
+## Dokumentacija konsenzusa
+
+Detalji BFT algoritma, detekcije malicioznih senzora, demo scenarija i report endpoint-a nalaze se u [docs/consensus.md](docs/consensus.md).
 
 ## Demo scenario
 
