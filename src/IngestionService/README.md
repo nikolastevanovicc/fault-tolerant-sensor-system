@@ -18,7 +18,7 @@ Lokalna PostgreSQL baza moze se pokrenuti iz repozitorijuma:
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-Pri pokretanju servis trenutno koristi `EnsureCreated` da napravi potrebne tabele ako ne postoje.
+Pri pokretanju servis primenjuje Entity Framework Core migracije.
 
 ## Endpoint-i
 

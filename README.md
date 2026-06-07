@@ -93,7 +93,7 @@ SensorReadings
 SensorStates
 ```
 
-Servis pri pokretanju koristi `EnsureCreated` da napravi tabele ako ne postoje.
+Servis pri pokretanju primenjuje Entity Framework Core migracije.
 
 Provera podataka u bazi:
 
