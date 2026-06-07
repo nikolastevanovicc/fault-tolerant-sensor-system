@@ -26,9 +26,24 @@ public sealed class SensorsController : ControllerBase
     }
 
     [HttpGet]
-    public ActionResult<IReadOnlyCollection<SensorStateDto>> GetSensors()
+    public async Task<ActionResult<IReadOnlyCollection<SensorStateDto>>> GetSensors(
+        CancellationToken cancellationToken)
     {
-        var sensors = _sensorStateStore.GetAll(DateTimeOffset.UtcNow);
+        var cutoff = DateTimeOffset.UtcNow.AddSeconds(-10);
+        var sensors = await _dbContext.SensorStates
+            .AsNoTracking()
+            .OrderBy(sensor => sensor.SensorId)
+            .Select(sensor => new SensorStateDto
+            {
+                SensorId = sensor.SensorId,
+                LastMessageTime = sensor.LastMessageTime,
+                IsActive = sensor.LastMessageTime >= cutoff,
+                Quality = sensor.Quality,
+                BlockedUntil = sensor.BlockedUntil,
+                LastMessageId = sensor.LastMessageId
+            })
+            .ToListAsync(cancellationToken);
+
         return Ok(sensors);
     }
 
@@ -36,15 +51,16 @@ public sealed class SensorsController : ControllerBase
     public async Task<ActionResult<IReadOnlyCollection<SensorStateDto>>> GetActiveSensors(
         CancellationToken cancellationToken)
     {
+        var cutoff = DateTimeOffset.UtcNow.AddSeconds(-10);
         var sensors = await _dbContext.SensorStates
             .AsNoTracking()
-            .Where(sensor => sensor.IsActive)
+            .Where(sensor => sensor.LastMessageTime >= cutoff)
             .OrderBy(sensor => sensor.SensorId)
             .Select(sensor => new SensorStateDto
             {
                 SensorId = sensor.SensorId,
                 LastMessageTime = sensor.LastMessageTime,
-                IsActive = sensor.IsActive,
+                IsActive = true,
                 Quality = sensor.Quality,
                 BlockedUntil = sensor.BlockedUntil,
                 LastMessageId = sensor.LastMessageId
