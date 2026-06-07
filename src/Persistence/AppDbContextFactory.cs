@@ -6,7 +6,7 @@ namespace Persistence;
 public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
     private const string DefaultConnectionString =
-        "Host=localhost;Port=5432;Database=snus_sensor_monitoring;Username=postgres;Password=postgres";
+        "Host=localhost;Port=5432;Database=snus_sensor_monitoring;Username=snus;Password=snus";
 
     public AppDbContext CreateDbContext(string[] args)
     {
