@@ -1,5 +1,7 @@
 using IngestionService.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Persistence;
 using Shared.Dtos;
 
 namespace IngestionService.Controllers;
@@ -11,19 +13,44 @@ public sealed class SensorsController : ControllerBase
     private static readonly TimeSpan ManualBlockDuration = TimeSpan.FromSeconds(30);
     private readonly ISensorStateStore _sensorStateStore;
     private readonly IReadingPersistence _readingPersistence;
+    private readonly AppDbContext _dbContext;
 
     public SensorsController(
         ISensorStateStore sensorStateStore,
-        IReadingPersistence readingPersistence)
+        IReadingPersistence readingPersistence,
+        AppDbContext dbContext)
     {
         _sensorStateStore = sensorStateStore;
         _readingPersistence = readingPersistence;
+        _dbContext = dbContext;
     }
 
     [HttpGet]
     public ActionResult<IReadOnlyCollection<SensorStateDto>> GetSensors()
     {
         var sensors = _sensorStateStore.GetAll(DateTimeOffset.UtcNow);
+        return Ok(sensors);
+    }
+
+    [HttpGet("active")]
+    public async Task<ActionResult<IReadOnlyCollection<SensorStateDto>>> GetActiveSensors(
+        CancellationToken cancellationToken)
+    {
+        var sensors = await _dbContext.SensorStates
+            .AsNoTracking()
+            .Where(sensor => sensor.IsActive)
+            .OrderBy(sensor => sensor.SensorId)
+            .Select(sensor => new SensorStateDto
+            {
+                SensorId = sensor.SensorId,
+                LastMessageTime = sensor.LastMessageTime,
+                IsActive = sensor.IsActive,
+                Quality = sensor.Quality,
+                BlockedUntil = sensor.BlockedUntil,
+                LastMessageId = sensor.LastMessageId
+            })
+            .ToListAsync(cancellationToken);
+
         return Ok(sensors);
     }
 

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using IngestionService.Services;
+using Microsoft.EntityFrameworkCore;
+using Persistence;
 using Shared.Dtos;
 
 namespace IngestionService.Controllers;
@@ -8,21 +10,91 @@ namespace IngestionService.Controllers;
 [Route("api/readings")]
 public sealed class ReadingsController : ControllerBase
 {
+    private const int DefaultHistoryMaxResults = 500;
+    private const int MaximumHistoryMaxResults = 5000;
     private readonly ILogger<ReadingsController> _logger;
     private readonly ISensorStateStore _sensorStateStore;
     private readonly IReadingPersistence _readingPersistence;
     private readonly AlarmConsoleWriter _alarmConsoleWriter;
+    private readonly AppDbContext _dbContext;
 
     public ReadingsController(
         ILogger<ReadingsController> logger,
         ISensorStateStore sensorStateStore,
         IReadingPersistence readingPersistence,
-        AlarmConsoleWriter alarmConsoleWriter)
+        AlarmConsoleWriter alarmConsoleWriter,
+        AppDbContext dbContext)
     {
         _logger = logger;
         _sensorStateStore = sensorStateStore;
         _readingPersistence = readingPersistence;
         _alarmConsoleWriter = alarmConsoleWriter;
+        _dbContext = dbContext;
+    }
+
+    [HttpGet("history")]
+    public async Task<ActionResult<IReadOnlyCollection<SensorReadingHistoryDto>>> GetHistory(
+        [FromQuery] string? sensorId,
+        [FromQuery] DateTimeOffset? from,
+        [FromQuery] DateTimeOffset? to,
+        [FromQuery] bool includeConsensus = false,
+        [FromQuery] int maxResults = DefaultHistoryMaxResults,
+        CancellationToken cancellationToken = default)
+    {
+        var fromUtc = from?.ToUniversalTime();
+        var toUtc = to?.ToUniversalTime();
+
+        if (maxResults < 1)
+        {
+            return BadRequest("maxResults must be at least 1.");
+        }
+
+        if (fromUtc > toUtc)
+        {
+            return BadRequest("'from' must be earlier than or equal to 'to'.");
+        }
+
+        maxResults = Math.Min(maxResults, MaximumHistoryMaxResults);
+
+        var query = _dbContext.SensorReadings.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(sensorId))
+        {
+            query = query.Where(reading => reading.SensorId == sensorId);
+        }
+
+        if (fromUtc.HasValue)
+        {
+            query = query.Where(reading => reading.Timestamp >= fromUtc.Value);
+        }
+
+        if (toUtc.HasValue)
+        {
+            query = query.Where(reading => reading.Timestamp <= toUtc.Value);
+        }
+
+        if (!includeConsensus)
+        {
+            query = query.Where(reading => !reading.IsConsensusValue);
+        }
+
+        var readings = await query
+            .OrderByDescending(reading => reading.Timestamp)
+            .Take(maxResults)
+            .Select(reading => new SensorReadingHistoryDto
+            {
+                SensorId = reading.SensorId,
+                Temperature = reading.Temperature,
+                Timestamp = reading.Timestamp,
+                ReceivedAt = reading.ReceivedAt,
+                Quality = reading.Quality,
+                AlarmPriority = reading.AlarmPriority,
+                MessageId = reading.MessageId,
+                IsConsensusValue = reading.IsConsensusValue
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(readings);
     }
 
     [HttpPost]
