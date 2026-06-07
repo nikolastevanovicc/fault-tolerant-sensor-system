@@ -92,8 +92,30 @@ public sealed class ConsensusProcessor : IConsensusProcessor
             .ToListAsync(cancellationToken);
 
         var rawReadingCount = rawReadings.Count;
+        var readingSensorIds = rawReadings
+            .Select(reading => reading.SensorId)
+            .Distinct()
+            .ToList();
+        var badSensorIds = await _dbContext.SensorStates
+            .AsNoTracking()
+            .Where(state =>
+                readingSensorIds.Contains(state.SensorId)
+                && state.Quality == DataQuality.Bad)
+            .Select(state => state.SensorId)
+            .ToListAsync(cancellationToken);
+        var badSensorIdSet = badSensorIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var badSensorId in badSensorIds)
+        {
+            _logger.LogWarning(
+                "Sensor excluded from consensus because current SensorState quality is BAD. SensorId={SensorId}",
+                badSensorId);
+        }
+
         var goodSensorAverages = rawReadings
-            .Where(reading => reading.Quality == DataQuality.Good)
+            .Where(reading =>
+                reading.Quality == DataQuality.Good
+                && !badSensorIdSet.Contains(reading.SensorId))
             .GroupBy(reading => reading.SensorId)
             .Select(group => new SensorAverage(
                 group.Key,

@@ -2,16 +2,21 @@ using Microsoft.EntityFrameworkCore;
 using Persistence;
 using Persistence.Entities;
 using Shared.Dtos;
+using Shared.Enums;
 
 namespace IngestionService.Services;
 
 public sealed class PostgresReadingPersistence : IReadingPersistence
 {
     private readonly AppDbContext _dbContext;
+    private readonly ILogger<PostgresReadingPersistence> _logger;
 
-    public PostgresReadingPersistence(AppDbContext dbContext)
+    public PostgresReadingPersistence(
+        AppDbContext dbContext,
+        ILogger<PostgresReadingPersistence> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     public async Task SaveAcceptedReadingAsync(
@@ -20,19 +25,39 @@ public sealed class PostgresReadingPersistence : IReadingPersistence
         DateTimeOffset receivedAt,
         CancellationToken cancellationToken)
     {
+        var sensorStateEntity = await GetOrCreateSensorStateAsync(sensorState, cancellationToken);
+        var preserveBadQuality = sensorStateEntity.Quality == DataQuality.Bad;
+        var effectiveReadingQuality = preserveBadQuality
+            ? DataQuality.Bad
+            : reading.Quality;
+
+        if (preserveBadQuality)
+        {
+            _logger.LogWarning(
+                "Sensor BAD state preserved; incoming quality was ignored. SensorId={SensorId}, IncomingQuality={IncomingQuality}",
+                reading.SensorId,
+                reading.Quality);
+
+            _logger.LogWarning(
+                "Incoming reading stored as BAD because sensor is already marked BAD. SensorId={SensorId}, MessageId={MessageId}, IncomingQuality={IncomingQuality}",
+                reading.SensorId,
+                reading.MessageId,
+                reading.Quality);
+        }
+
         _dbContext.SensorReadings.Add(new SensorReadingEntity
         {
             SensorId = reading.SensorId,
             Temperature = reading.Temperature,
             Timestamp = reading.Timestamp.ToUniversalTime(),
             ReceivedAt = receivedAt.ToUniversalTime(),
-            Quality = reading.Quality,
+            Quality = effectiveReadingQuality,
             AlarmPriority = reading.AlarmPriority,
             MessageId = reading.MessageId,
             IsConsensusValue = false
         });
 
-        await UpsertSensorStateAsync(sensorState, cancellationToken);
+        UpdateSensorState(sensorStateEntity, sensorState, preserveBadQuality);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -40,11 +65,12 @@ public sealed class PostgresReadingPersistence : IReadingPersistence
         SensorStateDto sensorState,
         CancellationToken cancellationToken)
     {
-        await UpsertSensorStateAsync(sensorState, cancellationToken);
+        var entity = await GetOrCreateSensorStateAsync(sensorState, cancellationToken);
+        UpdateSensorState(entity, sensorState, entity.Quality == DataQuality.Bad);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task UpsertSensorStateAsync(
+    private async Task<SensorStateEntity> GetOrCreateSensorStateAsync(
         SensorStateDto sensorState,
         CancellationToken cancellationToken)
     {
@@ -53,7 +79,7 @@ public sealed class PostgresReadingPersistence : IReadingPersistence
 
         if (entity is null)
         {
-            _dbContext.SensorStates.Add(new SensorStateEntity
+            entity = new SensorStateEntity
             {
                 SensorId = sensorState.SensorId,
                 LastMessageTime = sensorState.LastMessageTime.ToUniversalTime(),
@@ -61,14 +87,23 @@ public sealed class PostgresReadingPersistence : IReadingPersistence
                 Quality = sensorState.Quality,
                 BlockedUntil = sensorState.BlockedUntil?.ToUniversalTime(),
                 LastMessageId = sensorState.LastMessageId
-            });
-
-            return;
+            };
+            _dbContext.SensorStates.Add(entity);
         }
 
+        return entity;
+    }
+
+    private static void UpdateSensorState(
+        SensorStateEntity entity,
+        SensorStateDto sensorState,
+        bool preserveBadQuality)
+    {
         entity.LastMessageTime = sensorState.LastMessageTime.ToUniversalTime();
         entity.IsActive = sensorState.IsActive;
-        entity.Quality = sensorState.Quality;
+        entity.Quality = preserveBadQuality
+            ? DataQuality.Bad
+            : sensorState.Quality;
         entity.BlockedUntil = sensorState.BlockedUntil?.ToUniversalTime();
         entity.LastMessageId = sensorState.LastMessageId;
     }
